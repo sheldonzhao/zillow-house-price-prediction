@@ -59,8 +59,6 @@ for i in range(3):
     x_test['month_logerror'] = round(traingroupedMonth.ix[9 + int(i)]['logerror'], 5)
     xgb = XGBRegressor(max_depth=7, learning_rate=0.05, base_score=y_mean, min_child_weight=7, subsample=0.8,
                        colsample_bytree=0.8, n_estimators=200)
-    print(x_train.shape)
-    print(x_test.shape)
     xgb.fit(x_train, y_train)
     pred = xgb.predict(x_test)
 

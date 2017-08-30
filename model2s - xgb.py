@@ -41,6 +41,12 @@ for c in feat:
 train_df = train.merge(properties, how='left', on='parcelid')
 x_train = train_df.drop(['parcelid', 'logerror', 'transactiondate'], axis=1)
 x_test = properties.drop(['parcelid'], axis=1)
+
+# add statistic feature
+train_df["month"] = train_df.transactiondate.map(lambda x: str(x).split("-")[1])
+traingroupedMonth = train_df.groupby(["month"])["logerror"].mean().to_frame().reset_index()
+train_df['month_logerror'] = train_df['month'].map(lambda x: round(traingroupedMonth.ix[int(x) - 1]['logerror'], 5))
+train_df.pop('month')
 # shape
 print('Shape train: {}\nShape test: {}'.format(x_train.shape, x_test.shape))
 
@@ -63,7 +69,6 @@ print('Shape train: {}\nShape test: {}'.format(x_train.shape, x_test.shape))
 
 # xgboost params
 print('start to build model')
-dtrain = xgb.DMatrix(x_train, label=y_train)
 
 xgb_params = {
     'learning_rate': 0.03,
@@ -80,7 +85,6 @@ xgb_params = {
 }
 
 dtrain = xgb.DMatrix(x_train, y_train)
-dtest = xgb.DMatrix(x_test)
 
 # cross-validation
 cv_result = xgb.cv(xgb_params,
@@ -95,16 +99,20 @@ num_boost_rounds = len(cv_result)
 print(num_boost_rounds)
 # train model
 model = xgb.train(dict(xgb_params, silent=1), dtrain, num_boost_round=num_boost_rounds)
-pred = model.predict(dtest)
+res = []
+for i in range(3):
+    x_test['month_logerror'] = round(traingroupedMonth.ix[9 + int(i)]['logerror'], 5)
+    dtest = xgb.DMatrix(x_test)
+    pred = model.predict(dtest)
 
-y_pred = []
-for i, predict in enumerate(pred):
-    y_pred.append(str(round(predict, 4)))
-y_pred = np.array(y_pred)
+    y_pred = []
+    for i, predict in enumerate(pred):
+        y_pred.append(str(round(predict, 4)))
+    res.append(y_pred)
 
 output = pd.DataFrame({'ParcelId': properties['parcelid'].astype(np.int32),
-                       '201610': y_pred, '201611': y_pred, '201612': y_pred,
-                       '201710': y_pred, '201711': y_pred, '201712': y_pred})
+                       '201610': np.array(res[0]), '201611': np.array(res[1]), '201612': np.array(res[2]),
+                       '201710': np.array(res[0]), '201711': np.array(res[1]), '201712': np.array(res[2])})
 # set col 'ParceID' to first col
 cols = output.columns.tolist()
 cols = cols[-1:] + cols[:-1]
