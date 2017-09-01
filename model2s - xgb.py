@@ -1,37 +1,35 @@
+'''
+update: log and statistic of top features
+res: 0.06450
+'''
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 from sklearn.preprocessing import LabelEncoder
 import utils
 import zipfile
+import math
 from sklearn.model_selection import GridSearchCV
 
 properties = pd.read_csv(utils.file_properties)
 train = pd.read_csv(utils.file_train)
+
 # statistic features type
 table_type = properties.dtypes.reset_index()
 table_type.columns = ["feature", "Type"]
 print(table_type.groupby("Type").aggregate('count'))
 
 print('start to preprocess')
-for c, dtype in zip(properties.columns, properties.dtypes):
-    if dtype == np.float64:
-        properties[c] = properties[c].astype(np.float32)
-
 for c in properties.columns:
-    properties[c] = properties[c].fillna(0)
+    if properties[c].dtype == 'float64':
+        properties[c].fillna(properties[c].median(), inplace=True)
+        properties[c] = properties[c].astype(np.float32)
     if properties[c].dtype == 'object':
+        properties[c].fillna(0, inplace=True)
         lbl = LabelEncoder()
         lbl.fit(list(properties[c].values))
         properties[c] = lbl.transform(list(properties[c].values))
 
-'''
-hashottuborspa
-propertycountylandusecode
-propertyzoningdesc
-fireplaceflag
-taxdelinquencyflag
-'''
 feat = ['propertycountylandusecode', 'fireplaceflag', 'taxdelinquencyflag']
 for c in feat:
     feat_df = pd.get_dummies(properties[c], prefix=c)
@@ -40,15 +38,10 @@ for c in feat:
 
 train_df = train.merge(properties, how='left', on='parcelid')
 x_train = train_df.drop(['parcelid', 'logerror', 'transactiondate'], axis=1)
+# create test set
 x_test = properties.drop(['parcelid'], axis=1)
-
-# add statistic feature
-train_df["month"] = train_df.transactiondate.map(lambda x: str(x).split("-")[1])
-traingroupedMonth = train_df.groupby(["month"])["logerror"].mean().to_frame().reset_index()
-train_df['month_logerror'] = train_df['month'].map(lambda x: round(traingroupedMonth.ix[int(x) - 1]['logerror'], 5))
-train_df.pop('month')
 # shape
-print('Shape train: {}\nShape test: {}'.format(x_train.shape, x_test.shape))
+print('Shape train: {}'.format(x_train.shape))
 
 # drop out ouliers
 UP_LIMIT_BODER = 97
@@ -59,12 +52,40 @@ print('the logerror = %f < %f percent' % (ulimit, UP_LIMIT_BODER))
 print('the logerror = %f > %f percent' % (llimit, DOWN_LIMIT_BODER))
 train_df = train_df[train_df.logerror >= llimit]
 train_df = train_df[train_df.logerror <= ulimit]
+print('preprocess end')
 
+print('start feature engineering')
+statistic_feats = ['taxamount', 'landtaxvaluedollarcnt', 'structuretaxvaluedollarcnt',
+                   'lotsizesquarefeet', 'calculatedfinishedsquarefeet',
+                   'taxvaluedollarcnt']
+median_log_error = train_df['logerror'].median()
+# add statistic feature
+for c in statistic_feats:
+    median = train_df.loc[train_df[c].notnull()][c].median()
+    num = int(max(train_df[c]))
+    n = len(str(num))
+    train_df['temp'] = train_df[c].map(lambda x: np.log(x) // 5)
+    group_feat = train_df.groupby(['temp'])['logerror'].mean().to_dict()
+    train_df[c + '_logerror'] = train_df['temp'].map(lambda x: group_feat[x])
+    x_test['temp'] = x_test[c].map(lambda x: np.log(x) // 5)
+    x_test[c + '_logerror'] = x_test['temp'].map(
+        lambda x: group_feat[x] if x in group_feat.keys() else median_log_error)
+
+train_df.pop('temp')
+x_test.pop('temp')
+
+# add feature about transaction date
+train_df["month"] = train_df.transactiondate.map(lambda x: str(x).split("-")[1])
+traingroupedMonth = train_df.groupby(["month"])["logerror"].mean().to_frame().reset_index()
+train_df['month_logerror'] = train_df['month'].map(lambda x: round(traingroupedMonth.ix[int(x) - 1]['logerror'], 5))
+train_df.pop('month')
+
+# create training set
 x_train = train_df.drop(['parcelid', 'logerror', 'transactiondate'], axis=1)
 y_train = train_df["logerror"].values.astype(np.float32)
 y_mean = np.mean(y_train)
 
-print('After removing outliers:')
+print('feature engineering end')
 print('Shape train: {}\nShape test: {}'.format(x_train.shape, x_test.shape))
 
 # xgboost params

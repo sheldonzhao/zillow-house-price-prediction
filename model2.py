@@ -25,13 +25,6 @@ for c in properties.columns:
         lbl.fit(list(properties[c].values))
         properties[c] = lbl.transform(list(properties[c].values))
 
-'''
-hashottuborspa
-propertycountylandusecode
-propertyzoningdesc
-fireplaceflag
-taxdelinquencyflag
-'''
 feat = ['propertycountylandusecode', 'fireplaceflag', 'taxdelinquencyflag']
 for c in feat:
     feat_df = pd.get_dummies(properties[c], prefix=c)
