@@ -4,9 +4,10 @@ import xgboost as xgb
 from sklearn.preprocessing import LabelEncoder
 import utils
 import zipfile
+from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_absolute_error
 
-# res:0.064425
 properties = pd.read_csv(utils.file_properties)
 train = pd.read_csv(utils.file_train)
 
@@ -27,7 +28,7 @@ for c in feat:
     properties = pd.concat([properties, feat_df], axis=1)
     properties.pop(c)
 
-
+# cross features
 print('preprocess ends ')
 train_df = train.merge(properties, how='left', on='parcelid')
 print(train_df.shape)
@@ -42,70 +43,61 @@ traingroupedQuarter = train_df.groupby(["quarter"])["logerror"].mean().to_frame(
 train_df['month_logerror'] = train_df['month'].map(lambda x: round(traingroupedMonth.ix[int(x) - 1]['logerror'], 6))
 train_df['quarter_logerror'] = train_df['quarter'].map(
     lambda x: round(traingroupedQuarter.ix[int(x) - 1]['logerror'], 6))
-train_df.pop('month')
 train_df.pop('quarter')
 
-# drop out ouliers
-UP_LIMIT_BODER = 97.5
-DOWN_LIMIT_BODER = 2.5
-ulimit = np.percentile(train.logerror.values, UP_LIMIT_BODER)
-llimit = np.percentile(train.logerror.values, DOWN_LIMIT_BODER)
-print('the logerror = %f < %f percent' % (ulimit, UP_LIMIT_BODER))
-print('the logerror = %f > %f percent' % (llimit, DOWN_LIMIT_BODER))
-train_df = train_df[train_df.logerror >= llimit]
-train_df = train_df[train_df.logerror <= ulimit]
+select_quarter4 = train_df['month'] > 9
+train_df.pop('month')
 
 # create training set
-x_train = train_df.drop(['parcelid', 'logerror', 'transactiondate'], axis=1)
-y_train = train_df["logerror"].values.astype(np.float32)
-y_mean = np.mean(y_train)
+x_train_all = train_df.drop(['parcelid', 'logerror', 'transactiondate'], axis=1)
+y_mean = np.mean(train_df["logerror"])
 # create test set
 x_test = properties.drop(['parcelid'], axis=1)
-# standardization
-sc = StandardScaler()
-x_train = sc.fit_transform(x_train)
 
 print('After removing outliers:')
-print('Shape train: {}'.format(x_train.shape))
+print('Shape train: {}'.format(x_train_all.shape))
 print('feature engineering end')
 
 # xgboost params
 print('start to build model')
 xgb_params = {
-    'learning_rate': 0.03,
-    'max_depth': 5,
-    'min_child_weight': 8,
+    'learning_rate': 0.07,
+    'max_depth': 6,
     'silent': 1,
-    'subsample': 0.8,
-    'colsample_bytree': 0.8,
+    'alpha': 0.8,
+    'lambda': 8,
+    'subsample': 0.5,
+    'colsample_bytree': 0.7,
     'n_estimators': 1000,
     'gamma': 0,
     'objective': 'reg:linear',
     'eval_metric': 'mae',
-    #'base_score': y_mean,
+    'base_score': y_mean,
 }
 
-dtrain = xgb.DMatrix(x_train, y_train)
-# cross-validation
-cv_result = xgb.cv(xgb_params,
-                   dtrain,
-                   nfold=5,
-                   num_boost_round=1000,
-                   early_stopping_rounds=50,
-                   verbose_eval=1,
-                   show_stdv=False
-                   )
-num_boost_rounds = len(cv_result)
-print(num_boost_rounds)
-# train model
-model = xgb.train(dict(xgb_params, silent=1), dtrain, num_boost_round=num_boost_rounds)
-res = []
+x_valid = x_train_all[select_quarter4]
+y_valid = train_df['logerror'].values.astype(np.float32)[select_quarter4]
+dvalid_x = xgb.DMatrix(x_valid)
+dvalid_xy = xgb.DMatrix(x_valid, y_valid)
 
+# drop out ouliers
+train_df = train_df[~select_quarter4][(train_df.logerror >= -0.4) & (train_df.logerror <= 0.419)]
+y_train = train_df["logerror"].values.astype(np.float32)
+x_train = train_df.drop(['parcelid', 'logerror', 'transactiondate'], axis=1)
+
+dtrain = xgb.DMatrix(x_train, y_train)
+# train model
+evals = [(dtrain, 'train'), (dvalid_xy, 'eval')]
+model = xgb.train(xgb_params, dtrain, num_boost_round=2000, evals=evals, early_stopping_rounds=100, verbose_eval=10)
+# valid set
+valid_pred = model.predict(dvalid_x)
+print(mean_absolute_error(y_valid, valid_pred))
+
+res = []
 for i in range(3):
     x_test['month_logerror'] = round(traingroupedMonth.ix[9 + int(i)]['logerror'], 6)
     x_test['quarter_logerror'] = round(traingroupedQuarter.ix[3]['logerror'], 6)
-    test_set = sc.transform(x_test)
-    dtest = xgb.DMatrix(test_set)
+    dtest = xgb.DMatrix(x_test)
     pred = model.predict(dtest)
     res.append(pred)
 
