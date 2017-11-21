@@ -35,12 +35,12 @@ x_train = imputer.transform(x_train.iloc[:, :])
 
 • 3.2 Categorical features
 
-• 3.3 Statistic features
+• 3.3 key Statistic features
 ```python
 traingroupedMonth = train_df.groupby(["month"])["logerror"].mean().to_frame().reset_index()
 traingroupedQuarter = train_df.groupby(["quarter"])["logerror"].mean().to_frame().reset_index()
 ```
-• 3.4 time-series features (can fit the data of 2016 and 2017 well)
+• 3.4 key time-series features (can fit the data of 2016 and 2017 well)
 ```python
 df["transaction_year"] = df["transactiondate"].dt.year
 df["transaction_month"] = (df["transactiondate"].dt.year - 2016) * 12 + df["transactiondate"].dt.month
@@ -65,3 +65,4 @@ a good choice to reduce overfitting and enhance grade because, in this competiti
 
 ### Model Ensemble
 tools: stacknet, mlens
+improvement: add more models such as RandomForest, XGBRegressor, and ExtraTreesRegressor.
