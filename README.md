@@ -63,3 +63,5 @@ best grade: 0.06414 (with 2017 data)
 • Adaboost
 a good choice to reduce overfitting and enhance grade because, in this competition, outlier data can cause a big influence to the final result.
 
+### Model Ensemble
+tools: stacknet, mlens
