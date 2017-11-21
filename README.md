@@ -48,12 +48,18 @@ df["transaction_quarter"] = (df["transactiondate"].dt.year - 2016) * 4 + df["tra
 ```
 
 ## Modeling
-• 6.1 Simple modeling
-• 6.1.1 Cross validate models
-• 6.1.2 Hyperparamater tunning for best models
-• 6.1.3 Plot learning curves
-• 6.1.4 Feature importance of the tree based classifiers
-• 6.2 Ensemble modeling
-• 6.2.1 Combining models
-• 6.3 Prediction
-• 6.3.1 Predict and Submit results
+• XGBoost
+best grade: 0.06442 (without 2017 data)
+
+• lightGBM
+best grade: 0.06440 (without 2017 data)
+
+• Neural Network(Keras)
+best grade: 0.0646 (without 2017 data)
+
+• Catboost
+best grade: 0.06414 (with 2017 data)
+
+• Adaboost
+a good choice to reduce overfitting and enhance grade because, in this competition, outlier data can cause a big influence to the final result.
+
